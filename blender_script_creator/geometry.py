@@ -1,45 +1,82 @@
-import bmesh
-import bpy
-
+from blender_script_creator import bpy, bmesh
+from blender_script_creator.materials import Material
 from blender_script_creator.modifier import Subsurface, Modifier
-from blender_script_creator.script import blender_function, blender_basic_script
+from blender_script_creator.script import blender_function, blender_basic_script, BlenderClass
 
-@blender_function(dependencies=[Modifier])
-class BlenderObject():
-    used_names=[]
-    objects={}
-    def __init__(self,obj,name):
-        self._obj=obj
-        self.scenes={}
+import numpy as np
+
+
+#@blender_function(dependencies=[Modifier])
+class BlenderObject(BlenderClass):
+    dependencies=BlenderClass.dependencies+[Modifier,Material]
+    used_names = []
+    objects = {}
+
+    def __init__(self, obj, name):
+        self._material=None
+        self._obj = obj
+        self.scenes = {}
         if name in self.used_names:
             raise ValueError("object with name '{}' already defined, please rename".format(name))
         self.used_names.append(name)
-        self.objects[name]=self
-        self._true_name=name
+        self.objects[name] = self
+        self._true_name = name
 
     @property
     def obj(self):
         return self._obj
 
-    def add_modifier(self,name,mod:Modifier):
-        mod.apply(self._obj,name)
+    def add_modifier(self, name, mod: Modifier):
+        mod.apply(self._obj, name)
 
-    def set_location(self,x,y,z):
+    @property
+    def location(self):
+        return np.array(self._obj.location)
+
+    @location.setter
+    def location(self, xyz):
+        x, y, z = xyz
+        self.set_location(x, y, z)
+
+    def set_location(self, x=None, y=None, z=None):
+        if x is None or y is None or z is None:
+            l = self.location
+            if x is None:
+                x = l[0]
+            if y is None:
+                y = l[1]
+            if z is None:
+                z = l[2]
         self._obj.location = (x, y, z)
 
-    def set_true_name(self,name):
-        self._true_name=name
+    def set_true_name(self, name):
+        self._true_name = name
 
-    def store_scene(self,scene_n):
-        self.scenes[scene_n]={
-            "location":self._obj.location
+    def store_scene(self, scene_n):
+        self.scenes[scene_n] = {
+            "location": self._obj.location
         }
+
+    @property
+    def material(self):
+        if self._material is None:
+            if self._obj.data.materials:
+                self.material=Material(self._obj.data.materials[0])
+        return self._material
+
+    @material.setter
+    def material(self,mat:Material):
+        self._material=mat
+        if self._obj.data.materials:
+            self._obj.data.materials[0] = mat.mat
+        else:
+            self._obj.data.materials.append(mat.mat)
 
 @blender_function(dependencies=[BlenderObject])
 def create_plain_object(name, data=None):
     obj = bpy.data.objects.new(name, data)
     bpy.context.collection.objects.link(obj)
-    bo=BlenderObject(obj,name=name)
+    bo = BlenderObject(obj, name=name)
     bo.set_true_name(obj.name)
     return bo
 
@@ -50,20 +87,22 @@ def find_object(name):
         return BlenderObject.objects[name]
     for obj in bpy.context.scene.objects:
         if obj.name == name:
-            return BlenderObject(obj,name=name)
+            return BlenderObject(obj, name=name)
 
     for obj in bpy.context.scene.objects:
-        if obj.name.rsplit(".",maxsplit=1)[0] == name:
-            return BlenderObject(obj,name=name)
+        if obj.name.rsplit(".", maxsplit=1)[0] == name:
+            return BlenderObject(obj, name=name)
+
 
 @blender_function(dependencies=[find_object])
-def get_or_create_object(name,creator,**kwargs):
-    obj=find_object(name)
+def get_or_create_object(name, creator, **kwargs):
+    obj = find_object(name)
     if obj is None:
-        obj=creator(name=name,**kwargs)
+        obj = creator(name=name, **kwargs)
     return obj
 
-@blender_function(dependencies=[create_plain_object,Subsurface])
+
+@blender_function(dependencies=[create_plain_object, Subsurface])
 def create_sphere(name="uvsphere", x=0, y=0, z=0, dia=1):
     mesh = bpy.data.meshes.new(name)
     uvsphere = create_plain_object(name, mesh)
@@ -73,15 +112,11 @@ def create_sphere(name="uvsphere", x=0, y=0, z=0, dia=1):
     bm.to_mesh(mesh)
     bm.free()
 
+    uvsphere.add_modifier('spherification', Subsurface(levels=3, render_levels=6))
 
-    uvsphere.add_modifier('spherification',Subsurface(levels=3,render_levels=6))
-
-    uvsphere.set_location(x,y,z)
-
-
+    uvsphere.set_location(x, y, z)
 
     return uvsphere
-
 
 
 @blender_basic_script
@@ -90,12 +125,12 @@ def set_parent(child, parent):
 
 
 @blender_function(dependencies=[create_plain_object])
-def create_text(text="lorem", name="font object", x=0, y=0, z=0,size=1):
+def create_text(text="lorem", name="font object", x=0, y=0, z=0, size=1):
     font_curve = bpy.data.curves.new(type="FONT", name="Font Curve")
     font_curve.body = text
     text = create_plain_object(name, font_curve)
     text.location = (x, y, z)
-    text.data.size=size
+    text.data.size = size
     return text
 
 
@@ -117,5 +152,3 @@ def connect_points(p1, p2, d=1, name="cylinder"):
     curve.data.splines[0].bezier_points[1].handle_left_type = 'VECTOR'
     curve.location = o
     return curve
-
-

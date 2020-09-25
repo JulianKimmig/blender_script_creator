@@ -25,7 +25,7 @@ class BlenderFunction():
     def __name__(self):
         return self._func.__name__
 
-class BlenderClass():
+class _BlenderClass():
     dependencies=[]
 
     @classmethod
@@ -33,11 +33,15 @@ class BlenderClass():
         m = inspect.getsource(cls)
         while m.replace(" ","").startswith("@"):
             m = m.split("\n",maxsplit=1)[1]
-
+        m = m.replace("_BlenderClass","")
         return m
 
     def __str__(self):
         return self.__class__.to_code()
+
+class BlenderClass(_BlenderClass):
+    dependencies=[]
+
 
 def blender_function(dependencies=None):
     if dependencies is None:
@@ -83,12 +87,11 @@ class BlenderScript():
         s+="\n"
 
         m=self.main
-        if isinstance(m,BlenderFunction):
+        if isinstance(m,(BlenderFunction,BlenderClass)):
             self.register_blender_dependencies(m)
             m=m.func
 
         for f  in self._blender_functions:
-            print(f,isinstance(f,BlenderClass))
             if isinstance(f,BlenderClass):
                 s+=f.to_code(f)+"\n"
             else:
@@ -130,6 +133,7 @@ class BlenderScript():
         return self.to_script()
 
     def register_blender_function(self, m:BlenderFunction):
+        print(m)
         if m in self._blender_functions:
             return
 
@@ -137,8 +141,10 @@ class BlenderScript():
         self._blender_functions.append(m)
 
     def register_blender_class(self,cls:BlenderClass):
+        print(cls)
         if cls in self._blender_functions:
             return
+        self.register_blender_dependencies(cls)
         for superclass in reversed(cls.mro()):
             if superclass!=cls:
                 if issubclass(superclass,BlenderClass):
