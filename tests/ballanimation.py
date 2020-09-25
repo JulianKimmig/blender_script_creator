@@ -36,5 +36,5 @@ script.main = ball_main
 
 
 
-with open(__file__ + "_blend", "w+") as f:
+with open(__file__.replace(".py","_blend.py"), "w+") as f:
     f.write(script.to_script())
