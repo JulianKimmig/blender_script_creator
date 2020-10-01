@@ -105,10 +105,11 @@ class BlenderScript():
         m  = inspect.getsource(m)
 
         m = m.replace("\t","    ")
-        while m.replace(" ","").startswith("@"):
+        #print(m)
+        while not m.replace(" ","").startswith("def"):
             m = m.split("\n",maxsplit=1)[1]
         m = m.split("\n",maxsplit=1)[1]
-
+        #print(m)
         indent=1000
         for line in m.split("\n"):
             i=0

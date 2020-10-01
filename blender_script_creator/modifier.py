@@ -11,7 +11,11 @@ class Modifier(BlenderClass):
         mod = obj.modifiers.new(name, self.tag)
         for k, v in self.kwargs.items():
             setattr(mod, k, v)
+        return mod
 
 
 class Subsurface(Modifier):
     tag = 'SUBSURF'
+
+class Wave(Modifier):
+    tag = 'WAVE'

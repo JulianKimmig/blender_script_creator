@@ -4,6 +4,9 @@ import bpy
 from molNet.third_party.blender.tools import blender_function
 import numpy as np
 
+from blender_script_creator.geometry import BlenderObject
+
+
 @blender_function(dependencies=[])
 class BlenderAnimationTracker:
     def __init__(self, fps=24):
@@ -35,6 +38,7 @@ def finish_animation(animation_tracker):
 
 @blender_function(dependencies=[])
 def move_object(obj,x=0,y=0,z=0,delta=False,animator=None,time=0):
+
     if animator:
         obj.keyframe_insert(data_path="location", frame=animator.current_frame)
     vec = np.array([x,y,z],dtype=float)

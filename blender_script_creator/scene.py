@@ -5,7 +5,7 @@ from blender_script_creator.script import blender_function, blender_basic_script
 
 
 @blender_function(dependencies=[BlenderObject,Material])
-def delete_all_but(l):
+def delete_all_but(l=[]):
     obj_list = []
     for i in l:
         if isinstance(i,BlenderObject):

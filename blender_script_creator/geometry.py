@@ -20,14 +20,25 @@ class BlenderObject(BlenderClass):
             raise ValueError("object with name '{}' already defined, please rename".format(name))
         self.used_names.append(name)
         self.objects[name] = self
-        self._true_name = name
+        self._true_name = obj.name
+        self.name=name
 
     @property
     def obj(self):
         return self._obj
 
     def add_modifier(self, name, mod: Modifier):
-        mod.apply(self._obj, name)
+        return mod.apply(self._obj, name)
+
+    @property
+    def parent(self):
+        return self._obj.parent
+
+    @parent.setter
+    def parent(self,obj):
+        if isinstance(obj,BlenderObject):
+            obj=obj.obj
+        self._obj.parent=obj
 
     @property
     def location(self):
@@ -49,6 +60,21 @@ class BlenderObject(BlenderClass):
                 z = l[2]
         self._obj.location = (x, y, z)
 
+    def set_rotation(self, x=None, y=None, z=None):
+        fac=(2*np.pi/360)
+        rv=np.array([x,y,z],dtype=float)
+        rv=rv*fac
+        if x is None or y is None or z is None:
+            l = self._obj.rotation_euler
+            if x is None:
+                rv[0] = l[0]
+            if y is None:
+                rv[1] = l[1]
+            if z is None:
+                rv[1] = l[2]
+
+        self._obj.rotation_euler = rv
+
     def set_true_name(self, name):
         self._true_name = name
 
@@ -68,16 +94,26 @@ class BlenderObject(BlenderClass):
     def material(self,mat:Material):
         self._material=mat
         if self._obj.data.materials:
-            self._obj.data.materials[0] = mat.mat
+            if self._obj.data.materials[0] != mat.mat:
+                self._obj.data.materials[0] = mat.mat
         else:
             self._obj.data.materials.append(mat.mat)
+
+    @classmethod
+    def unregister(cls, obj):
+        BlenderObject.used_names.remove(obj.name)
+        del BlenderObject.objects[obj.name]
+
+    @classmethod
+    def from_blender_object(cls,obj):
+        BlenderObject.unregister(obj)
+        return cls(obj.obj,name=obj.name)
 
 @blender_function(dependencies=[BlenderObject])
 def create_plain_object(name, data=None):
     obj = bpy.data.objects.new(name, data)
     bpy.context.collection.objects.link(obj)
     bo = BlenderObject(obj, name=name)
-    bo.set_true_name(obj.name)
     return bo
 
 
@@ -134,11 +170,14 @@ def create_text(text="lorem", name="font object", x=0, y=0, z=0, size=1):
     return text
 
 
-@blender_basic_script
+@blender_function(dependencies=[BlenderObject])
 def connect_points(p1, p2, d=1, name="cylinder"):
+    p1=np.array(p1)
+    p2=np.array(p2)
     o = (p1 + p2) / 2
     bpy.ops.curve.primitive_bezier_curve_add()
     curve = bpy.context.object
+    curve.name=name
 
     curve.data.dimensions = '3D'
     curve.data.fill_mode = 'FULL'
@@ -151,4 +190,4 @@ def connect_points(p1, p2, d=1, name="cylinder"):
     curve.data.splines[0].bezier_points[1].co = p2 - o
     curve.data.splines[0].bezier_points[1].handle_left_type = 'VECTOR'
     curve.location = o
-    return curve
+    return BlenderObject(curve,name=name)

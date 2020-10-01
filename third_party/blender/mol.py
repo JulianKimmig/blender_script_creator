@@ -22,13 +22,13 @@ def default_atom_material(color):
     emission.set("Strength",30)
     mixer.set("Fac",1.0)
 
-    mat.connect(color_node.output("Color"),emission.input("Color"))
-    mat.connect(color_node.output("Color"),bsdf.input("Base Color"))
+    mat.connect_node_sockets(color_node.output("Color"), emission.input("Color"))
+    mat.connect_node_sockets(color_node.output("Color"), bsdf.input("Base Color"))
 
-    mat.connect(emission.output("Emission"),mixer.input(1))
-    mat.connect(bsdf.output("BSDF"),mixer.input(2))
+    mat.connect_node_sockets(emission.output("Emission"), mixer.input(1))
+    mat.connect_node_sockets(bsdf.output("BSDF"), mixer.input(2))
 
-    mat.connect(mixer.output("Shader"),mat.material_output.input("Surface"))
+    mat.connect_node_sockets(mixer.output("Shader"), mat.material_output.input("Surface"))
     return mat
 
 @blender_function(dependencies=[default_atom_material])
