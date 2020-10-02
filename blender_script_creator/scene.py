@@ -7,8 +7,18 @@ from blender_script_creator.script import blender_function, blender_basic_script
 @blender_function(dependencies=[BlenderObject,Material])
 def delete_all_but(l=[]):
     obj_list = []
+    def append_blender_object(obj):
+        obj_list.append(obj)
+        for c in obj.children:
+            append_blender_object(c)
+        try:
+            obj_list.append(obj.data.materials[0])
+        except:
+            pass
+
     for i in l:
         if isinstance(i,BlenderObject):
+            append_blender_object(i.obj)
             obj_list.append(i.obj)
             if i.material:
                 obj_list.append(i.material.mat)
