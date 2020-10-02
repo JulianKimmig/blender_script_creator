@@ -12,7 +12,7 @@ class NodeSocket(BlenderClass):
         return self._node_socket
     @property
     def name(self):
-        return self._node_socket.name
+        return self._node_socket.name.replace(" ","_")
 
     def __repr__(self):
         return self.name
