@@ -199,12 +199,12 @@ class Material(BlenderClass):
         connect_node_sockets(self._mat.node_tree, node_socket1, node_socket2)
 
 class BlenderObject(BlenderClass):
-    dependencies=BlenderClass.dependencies+[Modifier,Material]
+    dependencies = BlenderClass.dependencies + [Modifier, Material]
     used_names = []
     objects = {}
 
     def __init__(self, obj, name):
-        self._material=None
+        self._material = None
         self._obj = obj
         self.scenes = {}
         if name in self.used_names:
@@ -212,7 +212,7 @@ class BlenderObject(BlenderClass):
         self.used_names.append(name)
         self.objects[name] = self
         self._true_name = obj.name
-        self.name=name
+        self.name = name
 
     @property
     def obj(self):
@@ -226,10 +226,10 @@ class BlenderObject(BlenderClass):
         return self._obj.parent
 
     @parent.setter
-    def parent(self,obj):
-        if isinstance(obj,BlenderObject):
-            obj=obj.obj
-        self._obj.parent=obj
+    def parent(self, obj):
+        if isinstance(obj, BlenderObject):
+            obj = obj.obj
+        self._obj.parent = obj
 
     @property
     def location(self):
@@ -252,9 +252,9 @@ class BlenderObject(BlenderClass):
         self._obj.location = (x, y, z)
 
     def set_rotation(self, x=None, y=None, z=None):
-        fac=(2*np.pi/360)
-        rv=np.array([x,y,z],dtype=float)
-        rv=rv*fac
+        fac = (2 * np.pi / 360)
+        rv = np.array([x, y, z], dtype=float)
+        rv = rv * fac
         if x is None or y is None or z is None:
             l = self._obj.rotation_euler
             if x is None:
@@ -278,12 +278,12 @@ class BlenderObject(BlenderClass):
     def material(self):
         if self._material is None:
             if self._obj.data.materials:
-                self.material=Material(self._obj.data.materials[0])
+                self.material = Material(self._obj.data.materials[0])
         return self._material
 
     @material.setter
-    def material(self,mat:Material):
-        self._material=mat
+    def material(self, mat: Material):
+        self._material = mat
         if self._obj.data.materials:
             if self._obj.data.materials[0] != mat.mat:
                 self._obj.data.materials[0] = mat.mat
@@ -296,9 +296,10 @@ class BlenderObject(BlenderClass):
         del BlenderObject.objects[obj.name]
 
     @classmethod
-    def from_blender_object(cls,obj):
+    def from_blender_object(cls, obj):
+        print(obj)
         BlenderObject.unregister(obj)
-        return cls(obj.obj,name=obj.name)
+        return cls(obj.obj, name=obj.name)
 
 def find_object(name):
     if name in BlenderObject.objects:
@@ -311,10 +312,12 @@ def find_object(name):
         if obj.name.rsplit(".", maxsplit=1)[0] == name:
             return BlenderObject(obj, name=name)
 
-def get_or_create_object(name, creator, **kwargs):
+def get_or_create_object(name, creator, cls=BlenderObject, **kwargs):
     obj = find_object(name)
     if obj is None:
         obj = creator(name=name, **kwargs)
+    if not isinstance(obj, cls):
+        cls.from_blender_object(obj)
     return obj
 
 def create_plain_object(name, data=None):
@@ -337,26 +340,63 @@ def new_camera(location=(0,0,12),rotation_euler=(0,0,0),lens=18,name="camera"):
     cam.set_active_cam()
     return cam
 
+class Connection(BlenderObject):
+
+    @property
+    def start(self):
+        #print(self._obj.data.splines[0].bezier_points[0].co)
+        #print("S",np.array(self._obj.location) , np.array(self._obj.data.splines[0].bezier_points[0].co))
+        return np.array(self._obj.location) + np.array(self._obj.data.splines[0].bezier_points[0].co)
+
+    @property
+    def dia(self):
+        return self._obj.data.bevel_depth
+
+    @dia.setter
+    def dia(self,dia):
+        self._obj.data.bevel_depth = dia
+
+    @property
+    def end(self):
+        return np.array(self._obj.data.splines[0].bezier_points[1].co) + np.array(self._obj.location)
+
+    @start.setter
+    def start(self, start):
+        self.set_start_end(start, self.end)
+
+    @end.setter
+    def end(self, end):
+        self.set_start_end(self.start, end)
+
+
+    def set_start_end(self, start, end):
+        print(start,end)
+        start = np.array(start)
+        end = np.array(end)
+        self._obj.location = (0,0,0)
+        o = (start + end) / 2
+
+
+        self._obj.data.splines[0].bezier_points[0].co = start - o
+        self._obj.data.splines[0].bezier_points[0].handle_left_type = 'VECTOR'
+
+        self._obj.data.splines[0].bezier_points[1].co = end - o
+        self._obj.data.splines[0].bezier_points[1].handle_left_type = 'VECTOR'
+        self._obj.location = o
+
 def connect_points(p1, p2, d=1, name="cylinder"):
-    p1=np.array(p1)
-    p2=np.array(p2)
-    o = (p1 + p2) / 2
     bpy.ops.curve.primitive_bezier_curve_add()
     curve = bpy.context.object
-    curve.name=name
-
+    curve.name = name
     curve.data.dimensions = '3D'
     curve.data.fill_mode = 'FULL'
     curve.data.bevel_depth = d
     curve.data.bevel_resolution = 6
-    # set first point to centre of sphere1
-    curve.data.splines[0].bezier_points[0].co = p1 - o
-    curve.data.splines[0].bezier_points[0].handle_left_type = 'VECTOR'
-    # set second point to centre of sphere2
-    curve.data.splines[0].bezier_points[1].co = p2 - o
-    curve.data.splines[0].bezier_points[1].handle_left_type = 'VECTOR'
-    curve.location = o
-    return BlenderObject(curve,name=name)
+
+    c = Connection(curve, name=name)
+    c.set_start_end(p1,p2)
+
+    return c
 
 class Wave(Modifier):
     tag = 'WAVE'
@@ -541,124 +581,204 @@ class Subsurface(Modifier):
     tag = 'SUBSURF'
 
 #OBJETCS
-#scene
-RENDER_EDIT=False
+# scene
+RENDER_EDIT = False
 if RENDER_EDIT:
     bpy.context.scene.eevee.use_gtao = True
-    bpy.context.scene.eevee.gtao_distance= 1
+    bpy.context.scene.eevee.gtao_distance = 1
     bpy.context.scene.eevee.gtao_factor = 3
     bpy.context.scene.eevee.use_bloom = True
     bpy.context.scene.eevee.use_ssr = True
     bpy.context.scene.view_settings.look = 'Very High Contrast'
 bpy.context.scene.use_nodes = True
-ntree=bpy.context.scene.node_tree
+ntree = bpy.context.scene.node_tree
 for currentNode in ntree.nodes:
     ntree.nodes.remove(currentNode)
 tree = bpy.context.scene.node_tree
-rlayer_node = Node(tree.nodes.new("CompositorNodeRLayers"),tree)
-composite_node = Node(tree.nodes.new("CompositorNodeComposite"),tree)
-node_viewer_node = Node(tree.nodes.new("CompositorNodeViewer"),tree)
-glare_node = Node(tree.nodes.new("CompositorNodeGlare"),tree)
-connect_node_sockets(tree,rlayer_node.Image,glare_node.Image_0)
-connect_node_sockets(tree,glare_node.Image_1,composite_node.Image)
-connect_node_sockets(tree,glare_node.Image_1,node_viewer_node.Image)
+rlayer_node = Node(tree.nodes.new("CompositorNodeRLayers"), tree)
+composite_node = Node(tree.nodes.new("CompositorNodeComposite"), tree)
+node_viewer_node = Node(tree.nodes.new("CompositorNodeViewer"), tree)
+glare_node = Node(tree.nodes.new("CompositorNodeGlare"), tree)
+connect_node_sockets(tree, rlayer_node.Image, glare_node.Image_0)
+connect_node_sockets(tree, glare_node.Image_1, composite_node.Image)
+connect_node_sockets(tree, glare_node.Image_1, node_viewer_node.Image)
 glare_node.node.glare_type = 'FOG_GLOW'
 glare_node.node.threshold = 0.2
-#ibjects
+# ibjects
 delete_all_but()
 anim = BlenderAnimationTracker()
 anim.clear_all()
 class BeamLayer():
-    def __init__(self,beam,name,dia=1.,color=(0,0.7,1,1),trans_dens=0.52,wave_height=0.5):
+    def __init__(self, beam, name):
         self.beam = beam
         self.name = name
-        self.create(dia=dia,color=color,trans_dens=trans_dens,wave_height=wave_height)
-    def create(self,dia,color,trans_dens,wave_height):
-        height=np.linalg.norm(self.beam.end-self.beam.start)
+        self._ini()
+        self._reload_from_beam()
+        # self.create(dia=dia,color=color,trans_dens=trans_dens,wave_height=wave_height)
+    def _ini(self):
         self._beam_layer = get_or_create_object(self.name,
-                                     connect_points,
-                                     p1=(0,0,0),
-                                     p2=(0,0,height),
-                                    d=dia
-                                     )
+                                                connect_points,
+                                                p1=(0, 0, 0),
+                                                p2=(0, 0, 10),
+                                                d=1
+                                                )
         self._beam_layer.parent = self.beam.obj
         self._beam_layer.add_modifier('subsurf', Subsurface(levels=3, render_levels=3))
         self._wave_mod = self._beam_layer.add_modifier('wave', Wave())
-        bpy.context.scene.tool_settings.use_transform_data_origin = True
-        self._beam_layer.obj.select_set(True)
-        bpy.ops.transform.rotate(value=np.pi/2, orient_axis='Z', orient_type='VIEW',
-                                 orient_matrix=((-1, 0, 0), (0,0, 1), (0, 1,0)),
-                                 orient_matrix_type='VIEW', mirror=True, use_proportional_edit=False,
-                                 proportional_edit_falloff='SMOOTH', proportional_size=1, use_proportional_connected=False, use_proportional_projected=False
-                                 )
-        bpy.context.scene.tool_settings.use_transform_data_origin = False
+      #bpy.context.scene.tool_settings.use_transform_data_origin = True
+      #  self._beam_layer.obj.select_set(True)
+      #  bpy.ops.transform.rotate(value=np.pi / 2, orient_axis='Z', orient_type='VIEW',
+        #                         orient_matrix=((-1, 0, 0), (0, 0, 1), (0, 1, 0)),
+       #                          orient_matrix_type='VIEW', mirror=True, use_proportional_edit=False,
+       #                          proportional_edit_falloff='SMOOTH', proportional_size=1,
+       #                          use_proportional_connected=False, use_proportional_projected=False
+       #                          )
+        #bpy.context.scene.tool_settings.use_transform_data_origin = False
         self._wave_mod.use_normal = True
-        self._wave_mod.start_position_x = -height
-        self._wave_mod.speed=self.beam.speed
-        self._wave_mod.time_offset=-(height-self._wave_mod.start_position_x)/self._wave_mod.speed
         self._wave_mod.narrowness = 0.5
         self._wave_mod.width = 3
-        self._wave_mod.height = wave_height
-        self._beam_layer_mat = get_or_create_material(name=self.name+"material",)
+        self._wave_mod.height = 0.5
+        self._beam_layer_mat = get_or_create_material(name=self.name + "material", )
         self._beam_layer_mat.mat.blend_method = 'BLEND'
         self._beam_layer_mat.mat.shadow_method = 'NONE'
-        mout=self._beam_layer_mat.get_node("Material Output")
-        mixer = self._beam_layer_mat.get_or_create_node(name="mixer1",type="ShaderNodeMixShader")
+        mout = self._beam_layer_mat.get_node("Material Output")
+        mixer = self._beam_layer_mat.get_or_create_node(name="mixer1", type="ShaderNodeMixShader")
         mixer.Shader_2 = mout.Surface
         mixer.Fac.value = 0.5
-        em = self._beam_layer_mat.get_or_create_node(name="emission",type="ShaderNodeEmission")
-        em.Color=color
-        em.Strength=10
-        mixer.Shader_1 = em.Emission
-        trans = self._beam_layer_mat.get_or_create_node(name="transparent",type="ShaderNodeBsdfTransparent")
+        self._em = self._beam_layer_mat.get_or_create_node(name="emission", type="ShaderNodeEmission")
+        self._em.Strength = 10
+        mixer.Shader_1 = self._em.Emission
+        trans = self._beam_layer_mat.get_or_create_node(name="transparent", type="ShaderNodeBsdfTransparent")
         mixer.Shader_0 = trans.BSDF
-        rgbramp = self._beam_layer_mat.get_or_create_node(name="rgbramp",type="ShaderNodeValToRGB")
-        rgbramp.node.color_ramp.elements[0].position = trans_dens
-        mixer.Fac=rgbramp.Color
-        noisetexture = self._beam_layer_mat.get_or_create_node(name="noisetexture",type="ShaderNodeTexNoise")
+        self._rgbramp = self._beam_layer_mat.get_or_create_node(name="rgbramp", type="ShaderNodeValToRGB")
+        self._rgbramp.node.color_ramp.elements[0].position = 0.5
+        mixer.Fac = self._rgbramp.Color
+        noisetexture = self._beam_layer_mat.get_or_create_node(name="noisetexture", type="ShaderNodeTexNoise")
         noisetexture.Scale = 1.5
         noisetexture.Detail = 16
         noisetexture.Roughness = 0.4
         noisetexture.Distortion = 0.5
-        rgbramp.Fac = noisetexture.Color
-        self._mapping = self._beam_layer_mat.get_or_create_node(name="mapping",type="ShaderNodeMapping")
+        self._rgbramp.Fac = noisetexture.Color
+        self._mapping = self._beam_layer_mat.get_or_create_node(name="mapping", type="ShaderNodeMapping")
         noisetexture.Vector = self._mapping.Vector_1
-        textcoord = self._beam_layer_mat.get_or_create_node(name="textcoord",type="ShaderNodeTexCoord")
+        textcoord = self._beam_layer_mat.get_or_create_node(name="textcoord", type="ShaderNodeTexCoord")
         self._mapping.Vector_0 = textcoord.Object
-        self._mapping.Location=(0,0,0)
-        self._beam_layer.material=self._beam_layer_mat
-    def create_motion(self,animator):
-        cf=animator.current_frame
+        self._mapping.Location = (0, 0, 0)
+        self._beam_layer.material = self._beam_layer_mat
+    def set_color(self, color):
+        self._em.Color = color
+    def set_dia(self,dia):
+        self._beam_layer.dia=dia
+    def wave_height(self,wvh):
+        self._wave_mod.height = wvh
+    def set_trans_dens(self, trans_dens):
+        self._rgbramp.node.color_ramp.elements[0].position = trans_dens
+    def _set_speed(self):
+        l = self.length
+        self._wave_mod.speed = self.beam.speed
+        self._wave_mod.time_offset = -(l - self._wave_mod.start_position_x) / self.beam.speed
+    def _reload_from_beam(self):
+        self._set_length(self.beam.length)
+        self._set_speed()
+    @property
+    def length(self):
+        return np.linalg.norm(self._beam_layer.end)
+    def _set_length(self, l):
+        self._beam_layer.end = (l, 0, 0)
+        l = self.length
+        self._wave_mod.start_position_x = - l
+        self._wave_mod.time_offset = -(l - self._wave_mod.start_position_x) / self.beam.speed
+    def create_motion(self, animator):
+        cf = animator.current_frame
         animator.go_to_frame(0)
-        animator.change_node_value(self._mapping.Location,value=(0,0,0))
+        animator.change_node_value(self._mapping.Location, value=(0, 0, 0))
+        animator.change_node_value(self._mapping.Rotation, value=(0, 0, 0))
         animator.go_to_frame(animator.max_frame)
-        animator.change_node_value(self._mapping.Location,value=(-animator.max_frame*self._wave_mod.speed,0,0))
+        animator.change_node_value(self._mapping.Location, value=(-animator.max_frame * self._wave_mod.speed,0,0, ))
+        animator.change_node_value(self._mapping.Rotation, value=(animator.max_frame * 0.1,0,0, ))
         animator.go_to_frame(cf)
-class Beam():
-    def __init__(self,name,start=(0,0,0),end=(0,0,50),speed=0.25):
+class Beam(BlenderObject):
+    def __init__(self, obj, name, start=(0, 0, 0), end=(0, 0, 50), speed=0.25):
+        self._layer = []
+        super().__init__(obj, name)
         self.speed = speed
         self.name = name
-        self.end = np.array(end)
-        self.start = np.array(start)
-        self._layer=[]
-        self.obj=get_or_create_object(self.name,create_plain_object)
-    def add_layer(self,dia=1.,color=(0,0.7,1,1),trans_dens=0.52,wave_height=0.5):
-        l=BeamLayer(self,name="{}_layer_{}".format(self.name,len(self._layer)),
-        dia=dia,color=color,
-                    trans_dens=trans_dens,
-                    wave_height=wave_height
-                    )
+        self._end = np.array(end)
+        self._start = np.array(start)
+    def add_layer(self, dia=1., color=(0, 0.7, 1, 1), trans_dens=0.52, wave_height=0.5):
+        l = BeamLayer(self, name="{}_layer_{}".format(self.name, len(self._layer)),
+                      #trans_dens=trans_dens,
+                      )
+        l.wave_height(wave_height)
+        l.set_trans_dens(trans_dens)
+        l.set_dia(dia)
+        l.set_color(color)
         self._layer.append(l)
-    def create_motion(self,animator):
+    def create_motion(self, animator):
         for layer in self._layer:
             layer.create_motion(animator)
-beam1=Beam(name="beam1",end=(0,50,0),speed=1)
-beam1.add_layer()
+    @property
+    def length(self):
+        return np.linalg.norm(self.end - self.start)
+    @property
+    def start(self):
+        return self._start
+    @property
+    def end(self):
+        return self._end
+    @start.setter
+    def start(self, loc):
+        loc = np.array(loc)
+        l = np.linalg.norm(self.end - loc)
+        for lay in self._layer:
+            lay.length = l
+        self.set_location(*loc)
+        self._start = loc
+        self._calc_rot()
+    @end.setter
+    def end(self, loc):
+        loc = np.array(loc)
+        d_vec=self.start - loc
+        l = np.linalg.norm(d_vec)
+        for lay in self._layer:
+            lay._set_length(l)
+        self._end = loc
+        self._calc_rot()
+    def _calc_rot(self):
+        d_vec= self.end - self.start
+        def rotation_matrix_from_vectors(vec1, vec2):
+            a, b = (vec1 / np.linalg.norm(vec1)).reshape(3), (vec2 / np.linalg.norm(vec2)).reshape(3)
+            v = np.cross(a, b)
+            c = np.dot(a, b)
+            s = np.linalg.norm(v)
+            kmat = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+            rotation_matrix = np.eye(3) + kmat + kmat.dot(kmat) * ((1 - c) / (s ** 2))
+            return np.nan_to_num(rotation_matrix)
+        a=d_vec
+        b=np.array([np.linalg.norm(a),0,0])
+        a, b = (a / np.linalg.norm(a)).reshape(3), (b / np.linalg.norm(b)).reshape(3)
+        if np.all(a == b):
+            return self.set_rotation(0,0,0)
+        if np.all(a == -b):
+            return self.set_rotation(0,0,180)
+        R=rotation_matrix_from_vectors(a,b)
+        Rx=np.degrees(np.arctan2(R[2,1],R[2,2]))
+        Ry=-np.degrees(np.arctan2(-R[2,0],np.sqrt(R[2,1]**2+R[2,2]**2)))
+        Rz=-np.degrees(np.arctan2(R[1,0],R[0,0]))
+        return self.set_rotation(Rx,Ry,Rz)
+def create_beam(name):
+    obj = create_plain_object(name=name,data=bpy.data.meshes.new(name))
+    return Beam.from_blender_object(obj)
+beam1 = get_or_create_object("beam1", creator=create_beam, cls=Beam)
+beam1.start = (0, 0,0)
+#beam1=Beam(name="beam1",end=(0,50,0),speed=1)
+beam1.add_layer(color=(1, 0, 0, 1))
 beam1.add_layer(dia=0.4,color=(1,1,1,1),trans_dens=0.48,wave_height=0.2)
-beam1.add_layer(dia=1.75,color=(1,0,0,1),trans_dens=0.56)
-anim.go_to_frame(50)
-cam = new_camera(location=(8,0,12),rotation_euler=(90,0,90))
-#anim.change_node_value(mapping.Location,value=(-anim.max_frame*mod.speed,0,0))
+beam1.add_layer(dia=1.75,color=(0.5,0,0.25,1),trans_dens=0.56)
+beam1.end = (-100,0,0)
+anim.go_to_frame(200)
+cam = new_camera(location=(8, 0, 12), rotation_euler=(90, 0, 90))
+# anim.change_node_value(mapping.Location,value=(-anim.max_frame*mod.speed,0,0))
 beam1.create_motion(anim)
 anim.finish_animation()
 print('DONE')
