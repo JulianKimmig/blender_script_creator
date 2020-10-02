@@ -12,8 +12,10 @@ class BlenderFunction():
         return self._func
 
     def __call__(self, *args, **kwargs):
-        return self.__call__(*args,**kwargs)
-
+        try:
+            return self._func(*args,**kwargs)
+        except:
+            pass
     def to_code(self):
         m = inspect.getsource(self.func)
         while m.replace(" ","").startswith("@"):
@@ -42,6 +44,13 @@ class _BlenderClass():
 class BlenderClass(_BlenderClass):
     dependencies=[]
 
+class BlenderVariable():
+    def __init__(self,name,value):
+        self.value = value
+        self.name = name
+
+    def to_code(self):
+        return "{} = {}".format(self.name,self.value)
 
 def blender_function(dependencies=None):
     if dependencies is None:
@@ -59,6 +68,7 @@ def blender_basic_script(func):
 
 class BlenderScript():
     def __init__(self):
+        self._blender_variables = []
         self._needed_objects = []
         self._blender_functions = []
         self._blender_operations = []
@@ -97,6 +107,8 @@ class BlenderScript():
             else:
                 s+=f.to_code()+"\n"
 
+        for v in self._blender_variables:
+            s+=v.to_code()+"\n"
 
         s+="#OBJETCS\n"
         for obj in self._needed_objects:
@@ -134,15 +146,16 @@ class BlenderScript():
         return self.to_script()
 
     def register_blender_function(self, m:BlenderFunction):
-        print(m)
         if m in self._blender_functions:
             return
 
         self.register_blender_dependencies(m)
         self._blender_functions.append(m)
 
+    def register_blender_variable(self,var):
+        self._blender_variables.append(var)
+
     def register_blender_class(self,cls:BlenderClass):
-        print(cls)
         if cls in self._blender_functions:
             return
         self.register_blender_dependencies(cls)
@@ -154,15 +167,16 @@ class BlenderScript():
         self._blender_functions.append(cls)
 #        print(cls,cls.mro())
 
-    def register_blender_dependencies(self, m:BlenderFunction):
+    def register_blender_dependencies(self, m:(BlenderFunction,BlenderClass)):
         for d in m.dependencies:
-
             if type(d)==type(BlenderClass) and issubclass(d,BlenderClass):
                 self.register_blender_class(d)
             elif isinstance(d,BlenderFunction):
                 self.register_blender_function(d)
+            elif isinstance(d,BlenderVariable):
+                self.register_blender_variable(d)
             else:
-                print(type(d), type(d))
+                print(type(d))
                 raise ValueError()
 
     def register_object(self,name,creator,**kwargs):
