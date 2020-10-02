@@ -6,14 +6,13 @@ from blender_script_creator.script import blender_function, blender_basic_script
 import numpy as np
 
 
-#@blender_function(dependencies=[Modifier])
 class BlenderObject(BlenderClass):
-    dependencies=BlenderClass.dependencies+[Modifier,Material]
+    dependencies = BlenderClass.dependencies + [Modifier, Material]
     used_names = []
     objects = {}
 
     def __init__(self, obj, name):
-        self._material=None
+        self._material = None
         self._obj = obj
         self.scenes = {}
         if name in self.used_names:
@@ -21,7 +20,7 @@ class BlenderObject(BlenderClass):
         self.used_names.append(name)
         self.objects[name] = self
         self._true_name = obj.name
-        self.name=name
+        self.name = name
 
     @property
     def obj(self):
@@ -35,10 +34,10 @@ class BlenderObject(BlenderClass):
         return self._obj.parent
 
     @parent.setter
-    def parent(self,obj):
-        if isinstance(obj,BlenderObject):
-            obj=obj.obj
-        self._obj.parent=obj
+    def parent(self, obj):
+        if isinstance(obj, BlenderObject):
+            obj = obj.obj
+        self._obj.parent = obj
 
     @property
     def location(self):
@@ -61,9 +60,9 @@ class BlenderObject(BlenderClass):
         self._obj.location = (x, y, z)
 
     def set_rotation(self, x=None, y=None, z=None):
-        fac=(2*np.pi/360)
-        rv=np.array([x,y,z],dtype=float)
-        rv=rv*fac
+        fac = (2 * np.pi / 360)
+        rv = np.array([x, y, z], dtype=float)
+        rv = rv * fac
         if x is None or y is None or z is None:
             l = self._obj.rotation_euler
             if x is None:
@@ -86,13 +85,14 @@ class BlenderObject(BlenderClass):
     @property
     def material(self):
         if self._material is None:
-            if self._obj.data.materials:
-                self.material=Material(self._obj.data.materials[0])
+            if self._obj.data is not None:
+                if self._obj.data.materials:
+                    self.material = Material(self._obj.data.materials[0])
         return self._material
 
     @material.setter
-    def material(self,mat:Material):
-        self._material=mat
+    def material(self, mat: Material):
+        self._material = mat
         if self._obj.data.materials:
             if self._obj.data.materials[0] != mat.mat:
                 self._obj.data.materials[0] = mat.mat
@@ -105,9 +105,10 @@ class BlenderObject(BlenderClass):
         del BlenderObject.objects[obj.name]
 
     @classmethod
-    def from_blender_object(cls,obj):
+    def from_blender_object(cls, obj):
         BlenderObject.unregister(obj)
-        return cls(obj.obj,name=obj.name)
+        return cls(obj.obj, name=obj.name)
+
 
 @blender_function(dependencies=[BlenderObject])
 def create_plain_object(name, data=None):
@@ -131,10 +132,12 @@ def find_object(name):
 
 
 @blender_function(dependencies=[find_object])
-def get_or_create_object(name, creator, **kwargs):
+def get_or_create_object(name, creator, cls=BlenderObject, **kwargs):
     obj = find_object(name)
     if obj is None:
         obj = creator(name=name, **kwargs)
+    if not isinstance(obj, cls):
+        cls.from_blender_object(obj)
     return obj
 
 
@@ -167,27 +170,66 @@ def create_text(text="lorem", name="font object", x=0, y=0, z=0, size=1):
     text = create_plain_object(name, font_curve)
     text.location = (x, y, z)
     text.data.size = size
+
     return text
 
 
-@blender_function(dependencies=[BlenderObject])
+class Connection(BlenderObject):
+
+    @property
+    def start(self):
+        #print(self._obj.data.splines[0].bezier_points[0].co)
+        #print("S",np.array(self._obj.location) , np.array(self._obj.data.splines[0].bezier_points[0].co))
+        return np.array(self._obj.location) + np.array(self._obj.data.splines[0].bezier_points[0].co)
+
+    @property
+    def dia(self):
+        return self._obj.data.bevel_depth
+
+    @dia.setter
+    def dia(self,dia):
+        self._obj.data.bevel_depth = dia
+
+    @property
+    def end(self):
+        return np.array(self._obj.data.splines[0].bezier_points[1].co) + np.array(self._obj.location)
+
+    @start.setter
+    def start(self, start):
+        self.set_start_end(start, self.end)
+
+    @end.setter
+    def end(self, end):
+        self.set_start_end(self.start, end)
+
+
+    def set_start_end(self, start, end):
+        print(start,end)
+        start = np.array(start)
+        end = np.array(end)
+        self._obj.location = (0,0,0)
+        o = (start + end) / 2
+
+
+        self._obj.data.splines[0].bezier_points[0].co = start - o
+        self._obj.data.splines[0].bezier_points[0].handle_left_type = 'VECTOR'
+
+        self._obj.data.splines[0].bezier_points[1].co = end - o
+        self._obj.data.splines[0].bezier_points[1].handle_left_type = 'VECTOR'
+        self._obj.location = o
+
+
+@blender_function(dependencies=[Connection])
 def connect_points(p1, p2, d=1, name="cylinder"):
-    p1=np.array(p1)
-    p2=np.array(p2)
-    o = (p1 + p2) / 2
     bpy.ops.curve.primitive_bezier_curve_add()
     curve = bpy.context.object
-    curve.name=name
-
+    curve.name = name
     curve.data.dimensions = '3D'
     curve.data.fill_mode = 'FULL'
     curve.data.bevel_depth = d
     curve.data.bevel_resolution = 6
-    # set first point to centre of sphere1
-    curve.data.splines[0].bezier_points[0].co = p1 - o
-    curve.data.splines[0].bezier_points[0].handle_left_type = 'VECTOR'
-    # set second point to centre of sphere2
-    curve.data.splines[0].bezier_points[1].co = p2 - o
-    curve.data.splines[0].bezier_points[1].handle_left_type = 'VECTOR'
-    curve.location = o
-    return BlenderObject(curve,name=name)
+
+    c = Connection(curve, name=name)
+    c.set_start_end(p1,p2)
+
+    return c
