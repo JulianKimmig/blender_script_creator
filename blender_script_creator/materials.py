@@ -44,6 +44,10 @@ class Material(BlenderClass):
         return nn
 
     @property
+    def material_output(self):
+        return self.get_or_create_node("Material Output","ShaderNodeOutputMaterial")
+
+    @property
     def name(self):
         return self._mat.name
 
@@ -98,6 +102,7 @@ class Material(BlenderClass):
 
 @blender_function(dependencies=[Material])
 def new_material(name):
+    print("NEW MATERIAL",name)
     mat = bpy.data.materials.new(name=name)
     mat.use_nodes = True
     node_tree = mat.node_tree
