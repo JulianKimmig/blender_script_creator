@@ -74,7 +74,14 @@ class BlenderAnimationTracker(BlenderClass):
                 f = self.current_frame
             self.run_frames(frames)
             kf = obj.keyframe_insert(data_path=data_path, frame=self.current_frame)
-            #   kf.interpolation ="LINEAR"
+            if interpolation is not None:
+                action = obj.animation_data.action
+                # kf.interpolation ="LINEAR"
+                fcurves = [fc for fc in action.fcurves if fc.data_path == data_path]
+                for fc in fcurves:
+                    for kfp in fc.keyframe_points:
+                        if kfp.co.x == self.current_frame:
+                            kfp.interpolation = interpolation
             if reverse:
                 self.go_to_frame(f)
 
@@ -175,8 +182,20 @@ class BlenderAnimationTracker(BlenderClass):
         node = socket.node
         cb = self.performe_keyframe_op(socket.socket, "default_value", frames=self.seconds_to_frames(time),
                                        reverse=reverse, interpolation=None)
+        if interpolation is not None:
+            fc = node.tree.animation_data.action.fcurves.find('nodes["{}"].inputs[{}].default_value'.format(node.name,socket.number))
+            for kfp in fc.keyframe_points:
+                if kfp.co.x == self.current_frame:
+                    kfp.interpolation = interpolation
+
         socket.value = value
         cb()
+        if interpolation is not None:
+            fc = node.tree.animation_data.action.fcurves.find('nodes["{}"].inputs[{}].default_value'.format(node.name,socket.number))
+            for kfp in fc.keyframe_points:
+                if kfp.co.x == self.current_frame:
+                    kfp.interpolation = interpolation
+
         # s="nodes['{}'].inputs[{}].default_value".format(node.name,socket.number)
         # print(s)
         # self.performe_keyframe_op(obj.node_tree,s,frames=self.seconds_to_frames(time),reverse=reverse,interpolation=interpolation)
