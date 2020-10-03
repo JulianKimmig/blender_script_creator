@@ -9,6 +9,7 @@ class BlenderAnimationTracker(BlenderClass):
     dependencies = [Material, BlenderObject]
 
     def __init__(self, fps=24):
+        self._finish_hooks = []
         self._names_frames = {}
         self.current_frame = 0
         self._max_frame = 0
@@ -48,6 +49,9 @@ class BlenderAnimationTracker(BlenderClass):
             end = self.get_frame(end)
         bpy.context.scene.frame_start = start
         bpy.context.scene.frame_end = end
+
+        for fh in self._finish_hooks:
+            fh(self)
 
     def clear_all(self):
         for a in bpy.data.actions:
@@ -182,6 +186,9 @@ class BlenderAnimationTracker(BlenderClass):
 
     def get_frame(self, name):
         return self._names_frames[name]
+
+    def register_finish_hook(self, callable):
+        self._finish_hooks.append(callable)
 
 
 class Camera(BlenderObject):
