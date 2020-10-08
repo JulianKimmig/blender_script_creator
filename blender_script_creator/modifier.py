@@ -19,3 +19,6 @@ class Subsurface(Modifier):
 
 class Wave(Modifier):
     tag = 'WAVE'
+
+class Build(Modifier):
+    tag = "BUILD"
