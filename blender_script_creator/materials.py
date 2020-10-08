@@ -45,7 +45,7 @@ class Material(BlenderClass):
 
     @property
     def material_output(self):
-        return self.get_or_create_node("Material Output","ShaderNodeOutputMaterial")
+        return self.get_or_create_node("Material Output","ShaderNodeOutputMaterial")[0]
 
     @property
     def name(self):
@@ -95,7 +95,8 @@ class Material(BlenderClass):
         nn = self.get_node(name)
         if nn is None:
             nn = self.new_node(type=type,name=name)
-        return nn
+            return nn, True
+        return nn, False
 
     def connect(self,node_socket1,node_socket2):
         connect_node_sockets(self._mat.node_tree, node_socket1, node_socket2)
@@ -128,4 +129,5 @@ def get_or_create_material(name):
     obj = find_material(name)
     if obj is None:
         obj = new_material(name)
-    return obj
+        return obj,True
+    return obj,False
