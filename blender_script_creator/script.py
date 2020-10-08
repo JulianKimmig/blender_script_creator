@@ -125,7 +125,7 @@ class BlenderScript():
         indent=1000
         for line in m.split("\n"):
             i=0
-            if len(line)>0:
+            if len(line.replace(" ",""))>0:
                 while line[0]==" " and i <= indent:
                     line=line[1:]
                     i+=1
